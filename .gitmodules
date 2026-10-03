@@ -1,0 +1,21 @@
+[submodule "upstream/stratagus"]
+	path = upstream/stratagus
+	url = https://github.com/Wargus/stratagus.git
+[submodule "upstream/wargus"]
+	path = upstream/wargus
+	url = https://github.com/Wargus/wargus.git
+[submodule "external/SDL"]
+	path = external/SDL
+	url = https://github.com/libsdl-org/SDL.git
+[submodule "external/SDL_mixer"]
+	path = external/SDL_mixer
+	url = https://github.com/libsdl-org/SDL_mixer.git
+[submodule "external/SDL_image"]
+	path = external/SDL_image
+	url = https://github.com/libsdl-org/SDL_image.git
+[submodule "external/freetype"]
+	path = external/freetype
+	url = https://github.com/freetype/freetype.git
+[submodule "upstream/war1gus"]
+	path = upstream/war1gus
+	url = https://github.com/Wargus/war1gus.git

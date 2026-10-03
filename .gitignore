@@ -1,0 +1,29 @@
+# Originalspieldaten des Spielers (GOG) und daraus extrahierte Daten — niemals committen
+/original-data/
+# Heruntergeladene Upstream-Releases (Binärdateien)
+/release/
+/Artifacts/
+/savegames/
+/.build/
+*.log
+*.apk
+*.aab
+*.jks
+*.keystore
+local.properties
+.env
+.env.*
+.DS_Store
+# Asset-Endungen als zweite Sicherung
+*.war
+*.mpq
+*.pud
+*.smk
+*.iso
+*.bin
+# Gradle/Build-Ausgaben und vorgebaute native Bibliotheken
+/android/.gradle/
+/android/build/
+/android/src/main/jniLibs/
+# Desktop-Vorschau-Ausgaben
+/tools/menu-preview/*.exe
