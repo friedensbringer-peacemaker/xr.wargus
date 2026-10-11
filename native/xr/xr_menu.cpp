@@ -1,17 +1,19 @@
 #include "xr_menu.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
 #include "xr_theme.h"
+#include "xr_menu_model.h"
 
 namespace xrs {
 namespace {
 
 using namespace menu_layout;
 
-constexpr int kTabs = 3;
+constexpr int kTabs = 4;
 constexpr Rgb kHoverFrame{252, 212, 60};  // Wargus-Gold
 
 const char* onOff(bool on) { return on ? "an" : "aus"; }
@@ -68,8 +70,9 @@ void VrMenu::update(const Settings& s, GroupMode groupMode, const std::string& s
   } else {
     // Stufe 2: Einstellungen mit Reitern.
     const int tabW = (kContentW - (kTabs - 1) * kGap) / kTabs;
-    const char* tabs[kTabs] = {"Spiel", "Fenster", "Anzeige"};
-    const MenuAction tabActions[kTabs] = {MenuAction::kTabGame, MenuAction::kTabWindow, MenuAction::kTabDisplay};
+    const char* tabs[kTabs] = {"Spiel", "Fenster", "Steuerung", "Anzeige"};
+    const MenuAction tabActions[kTabs] = {MenuAction::kTabGame, MenuAction::kTabWindow, MenuAction::kTabControls,
+                                          MenuAction::kTabDisplay};
     for (int t = 0; t < kTabs; ++t) {
       e.push_back({true, tabActions[t], 0, tabs[t], kMargin + t * (tabW + kGap), kTabY, tabW, kTabH,
                    page_ == t + 1, false});
@@ -94,13 +97,33 @@ void VrMenu::update(const Settings& s, GroupMode groupMode, const std::string& s
       grid(MenuAction::kToggleInputLog, std::string("Eingaben loggen: ") + onOff(s.logInput));
       grid(MenuAction::kDiagnose, "Diagnose ins Log");
     } else if (page_ == kPageWindow) {
-      grid(MenuAction::kResetWindow, "Fenster zurücksetzen");
+      // Ansicht Leinwand (aufrecht) oder Tisch (gekippt wie XR-Settlers); Größe/Abstand gelten je Ansicht.
+      const bool table = s.view == 1;
+      char value[48];
+      grid(MenuAction::kResetWindow, table ? "Tisch zurücksetzen" : "Fenster zurücksetzen");
+      grid(MenuAction::kToggleView, std::string("Ansicht: ") + (table ? "Tisch" : "Leinwand"));
+      grid(MenuAction::kSmaller, table ? "Tisch kleiner" : "Fenster kleiner");
+      grid(MenuAction::kLarger, table ? "Tisch größer" : "Fenster größer");
+      grid(MenuAction::kCloser, table ? "Tisch näher" : "Fenster näher");
+      grid(MenuAction::kFarther, table ? "Tisch weiter weg" : "Fenster weiter weg");
+      std::snprintf(value, sizeof(value), "Neigung + (%d Grad)", static_cast<int>(std::lround(s.tableTilt)));
+      grid(MenuAction::kTilt, "Neigung -", -1, !table);
+      grid(MenuAction::kTilt, value, 1, !table);
+      std::snprintf(value, sizeof(value), "Tisch tiefer (%d cm)", static_cast<int>(std::lround(s.tableLower)));
+      grid(MenuAction::kTableLower, "Tisch höher", -1, !table);
+      grid(MenuAction::kTableLower, value, 1, !table);
+    } else if (page_ == kPageControls) {
+      char value[48];
       grid(MenuAction::kToggleHand, std::string("Zeigerhand: ") + (s.pointerHand ? "rechts" : "links"));
-      grid(MenuAction::kSmaller, "Fenster kleiner");
-      grid(MenuAction::kLarger, "Fenster größer");
-      grid(MenuAction::kCloser, "Fenster näher");
-      grid(MenuAction::kFarther, "Fenster weiter weg");
-      grid(MenuAction::kToggleMenuStyle, std::string("Menüstil: ") + (s.menuOrc ? "Ork" : "Mensch"));
+      grid(MenuAction::kCycleDrag, std::string("Karte ziehen: ") + mapmove::dragLabel(s.dragSpeed));
+      std::snprintf(value, sizeof(value), "Scrolltempo + (%d)", s.scrollSpeed);
+      grid(MenuAction::kScrollSpeed, "Scrolltempo -", -1);
+      grid(MenuAction::kScrollSpeed, value, 1);
+      // Zeiger-Versatz: je Zeile ‹ (links/oben) und › (rechts/unten) mit Wert, Dauerdruck wiederholt
+      grid(MenuAction::kPointerOffsetX, "‹ Zeiger waagerecht", -1);
+      grid(MenuAction::kPointerOffsetX, ptroff::format(s.pointerOffsetX) + " ›", 1);
+      grid(MenuAction::kPointerOffsetY, "‹ Zeiger senkrecht", -1);
+      grid(MenuAction::kPointerOffsetY, ptroff::format(s.pointerOffsetY) + " ›", 1);
     } else {
       const char* target = s.target == TargetStyle::kOff ? "aus" : s.target == TargetStyle::kRing ? "Ring" : "Punkt";
       char value[48];
@@ -110,6 +133,7 @@ void VrMenu::update(const Settings& s, GroupMode groupMode, const std::string& s
       grid(MenuAction::kImageReset, "Bild zurücksetzen");
       static const char* crtModes[] = {"normal", "Scanlines", "CRT"};
       grid(MenuAction::kCycleCrt, std::string("Bildmodus: ") + crtModes[std::clamp(s.image.crt, 0, 2)]);
+      grid(MenuAction::kToggleMenuStyle, std::string("Menüstil: ") + (s.menuOrc ? "Ork" : "Mensch"));
       std::snprintf(value, sizeof(value), "Helligkeit + (%d)", s.image.brightness);
       grid(MenuAction::kBrightness, "Helligkeit -", -10);
       grid(MenuAction::kBrightness, value, 10);

@@ -15,6 +15,18 @@ Quest-Abnahme offen → Im Headset bestätigt.
 | AUDIO-001 | P1 | Quest-Abnahme offen (0.1) | MIDI-Musik über TiMidity + Freepats, Film-Ton über libvorbisfile |
 | STAB-001 | P1 | Quest-Abnahme offen (0.2.0) | Beenden sofort (SDL_APP_TERMINATING), Brille ab/auf ohne Hänger |
 
+## Ideen aus dem Headset (2026-10-04) – Stand 0.5.0
+
+| ID | Prio | Status | Aufgabe + Abnahmekriterium |
+|---|---|---|---|
+| CTRL-001 | P1 | Implementiert (0.5.0) | Scrolltempo im VR-Menü (Stick stufenlos über mittlere Maustaste) |
+| CTRL-002 | P1 | Implementiert (0.5.0) | Rechter Griff halten = Karte greifen/ziehen in alle Richtungen; kurz = Rechtsklick |
+| CTRL-003 | P1 | Implementiert (0.5.0) | Linker Griff halten + Hand vor/zurück = Zoom (Fenster/Tisch-Größe) |
+| VIEW-001 | P1 | Implementiert (0.5.0) | Tisch-Ansicht mit Neigung/Höhe wie XR-Settlers |
+| VIEW-002 | P2 | Offen | Echten Tisch erkennen (XR_FB_scene, `xrc::fitRealTable`) und das Brett darauf legen |
+| VIEW-003 | P2 | Offen | Tisch mit beiden Griffen greifen: drehen/verschieben wie im Tabletop Simulator |
+| CTRL-004 | P2 | Offen | Zoom in die Karte statt Fenstergröße (Stratagus kennt keinen Karten-Zoom; nur über Renderauflösung) |
+
 ## Danach
 
 | ID | Prio | Status | Aufgabe + Abnahmekriterium |

@@ -63,6 +63,13 @@ constexpr float kBelowEyes = 0.15f;       // Fenstermitte etwas unter Augenhöhe
 constexpr float kAdjustSpeed = 0.8f;      // m/s bei vollem Stickausschlag
 constexpr float kMenuStep = 0.2f;         // m pro Klick auf „kleiner/größer/näher/weiter“
 constexpr float kPointerTau = 0.025f;     // Zeigerglättung (leicht)
+constexpr float kGripDragStart = 0.012f;  // Griff: ab dieser Zeigerbewegung (Anteil Fensterbreite) Karte ziehen
+constexpr float kGripDragHold = 0.45f;    // … oder nach so langem Halten (sonst Rechtsklick beim Loslassen)
+constexpr float kZoomPerMeter = 2.5f;     // anderer Griff: Hand 28 cm heranziehen = doppelt so groß
+constexpr float kTiltStep = 5.0f;         // Tisch: Neigung je Klick (Grad)
+constexpr float kLowerStep = 5.0f;        // Tisch: Höhe je Klick (cm)
+constexpr float kDefaultTableWidth = 1.4f;
+constexpr float kDefaultTableDistance = 1.0f;
 constexpr float kClickFreeze = 0.085f;    // Zielpunkt nach Triggerdruck einfrieren
 constexpr float kHapticSeconds = 0.018f;
 constexpr float kHapticAmplitude = 0.25f;
@@ -92,6 +99,7 @@ constexpr float kEyeScale = 0.7f;         // Auflösung des Strahl-Layers relati
 // Ladeanzeige
 constexpr float kStepMinSeconds = 0.4f;   // kurze Schritte lesbar lassen
 constexpr float kGameStepSeconds = 0.6f;  // nach dem Startsignal noch erste Bilder abwarten
+constexpr float kLoaderTipSeconds = 8.0f;  // Ladebild mit Spieltipp mindestens so lange (Trigger/A/B: weiter)
 constexpr float kLoaderFallback = 30.0f;  // ohne Startsignal: spätestens dann Spielbild zeigen
 
 // Statistik
@@ -152,6 +160,7 @@ struct Shared {
   int frameW = 0, frameH = 0;
 
   std::atomic<int> windowW{0}, windowH{0};
+  std::atomic<int> logicalW{0}, logicalH{0};  // Renderfläche des Spiels (SDL_RenderSetLogicalSize)
   std::atomic<uint32_t> windowId{0};
   std::atomic<bool> warpPending{false};
   std::atomic<int> warpX{0}, warpY{0};
@@ -293,6 +302,16 @@ struct State {
   bool menuStickFocus = false;  // Fokus kommt vom Stick (Strahl übernimmt erst, wenn er sich bewegt)
   bool shiftNeedsRelease = false;  // A hat im Menü ausgelöst: erst loslassen, dann wieder Umschalt
   bool adjusting = false;
+  // Karte bewegen über die mittlere Maustaste (Stratagus MouseScrollMap): Griff ziehen oder Stick.
+  enum class Pan { kNone, kArming, kGrip, kStick } pan = Pan::kNone;
+  int panX = 0, panY = 0;            // Mausposition beim Drücken der mittleren Taste (Fensterpixel)
+  float panAccX = 0.0f, panAccY = 0.0f;  // noch nicht gesendete Verschiebung (Fensterpixel)
+  float panLastU = 0.0f, panLastV = 0.0f;
+  bool gripPending = false;          // Griff gedrückt, noch nicht entschieden: Rechtsklick oder Ziehen
+  float gripHeld = 0.0f, gripStartU = 0.0f, gripStartV = 0.0f;
+  bool zoomActive = false;           // anderer Griff: Hand vor/zurück = Fenster größer/kleiner
+  XrVector3f zoomHand0{};
+  float zoomWidth0 = 0.0f;
   bool pointerValid = false;
   float pointerU = 0.5f, pointerV = 0.5f;
   float freezeLeft = 0.0f;
@@ -442,8 +461,11 @@ void typeSuggestion() {
 }
 
 void pointerToWindow(int* x, int* y) {
-  *x = static_cast<int>(std::clamp(g.pointerU, 0.0f, 1.0f) * static_cast<float>(s.windowW.load() - 1));
-  *y = static_cast<int>(std::clamp(g.pointerV, 0.0f, 1.0f) * static_cast<float>(s.windowH.load() - 1));
+  // Zeiger-Versatz (P3): verschiebt nur die Abbildung ins Spiel, nicht Strahl/Zielpunkt
+  const float u = ptroff::apply(std::clamp(g.pointerU, 0.0f, 1.0f), g.settings.pointerOffsetX);
+  const float v = ptroff::apply(std::clamp(g.pointerV, 0.0f, 1.0f), g.settings.pointerOffsetY);
+  *x = static_cast<int>(u * static_cast<float>(s.windowW.load() - 1));
+  *y = static_cast<int>(v * static_cast<float>(s.windowH.load() - 1));
 }
 
 void sendMouseButton(Uint8 button, bool down) {
@@ -466,6 +488,25 @@ void sendMouseButton(Uint8 button, bool down) {
   }
 }
 
+void sendMouseButtonAt(Uint8 button, bool down, int x, int y) {
+  SDL_Event e;
+  SDL_zero(e);
+  e.type = down ? SDL_MOUSEBUTTONDOWN : SDL_MOUSEBUTTONUP;
+  e.button.windowID = s.windowId.load();
+  e.button.button = button;
+  e.button.state = down ? SDL_PRESSED : SDL_RELEASED;
+  e.button.clicks = 1;
+  e.button.x = x;
+  e.button.y = y;
+  SDL_PushEvent(&e);
+}
+
+void requestWarpTo(int x, int y) {
+  s.warpX.store(x);
+  s.warpY.store(y);
+  s.warpPending.store(true);
+}
+
 // Mausposition: SDL_WarpMouseInWindow gehört in den Spielthread – dort ausgeführt.
 void requestWarp() {
   int x, y;
@@ -473,6 +514,31 @@ void requestWarp() {
   s.warpX.store(x);
   s.warpY.store(y);
   s.warpPending.store(true);
+}
+
+// ---- Karte bewegen (mittlere Maustaste)
+// Stratagus verschiebt bei gedrückter mittlerer Taste die Karte um Tempo × (Maus − Startpunkt) und setzt die
+// Maus danach auf den Startpunkt zurück. Wir senden je Frame die gewünschte Verschiebung als Mausbewegung ab
+// dem Startpunkt; Bruchteile laufen auf, bis der Spielthread die letzte Bewegung übernommen hat.
+void endPan() {
+  if (g.pan == State::Pan::kGrip || g.pan == State::Pan::kStick) {
+    sendMouseButtonAt(SDL_BUTTON_MIDDLE, false, g.panX, g.panY);
+  }
+  g.pan = State::Pan::kNone;
+  g.panAccX = g.panAccY = 0.0f;
+  requestWarp();  // Spiel-Mauszeiger zurück unter den Strahl
+}
+
+void panBy(float windowDx, float windowDy) {
+  g.panAccX += windowDx;
+  g.panAccY += windowDy;
+  if (s.warpPending.load()) return;  // letzte Bewegung noch nicht übernommen
+  const int ox = static_cast<int>(g.panAccX), oy = static_cast<int>(g.panAccY);
+  if (ox == 0 && oy == 0) return;
+  g.panAccX -= static_cast<float>(ox);
+  g.panAccY -= static_cast<float>(oy);
+  const int w = std::max(1, s.windowW.load()), h = std::max(1, s.windowH.load());
+  requestWarpTo(std::clamp(g.panX + ox, 0, w - 1), std::clamp(g.panY + oy, 0, h - 1));
 }
 
 void setHeld(bool& held, bool want, SDL_Keycode key) {
@@ -495,7 +561,10 @@ void releaseAll(const char* reason) {
   bool any = g.leftClick.down() || g.rightClick.down() || g.keys.up || g.keys.down || g.keys.left ||
              g.keys.right || g.keys.shift || g.keys.ctrl;
   if (g.leftClick.down()) sendMouseButton(SDL_BUTTON_LEFT, false);
-  if (g.rightClick.down()) sendMouseButton(SDL_BUTTON_RIGHT, false);
+  if (g.rightClick.down() && !g.gripPending && g.pan == State::Pan::kNone) sendMouseButton(SDL_BUTTON_RIGHT, false);
+  if (g.pan != State::Pan::kNone) endPan();
+  g.gripPending = false;
+  g.zoomActive = false;
   g.leftClick.reset();
   g.rightClick.reset();
   g.adjustGrip.reset();
@@ -516,16 +585,35 @@ void releaseAll(const char* reason) {
 
 // ================================================================ Fenster-Pose
 
-XrPosef panelPose() { return panelPoseFor(g.anchor, g.yaw, g.settings.distance); }
+bool tableView() { return g.settings.view == 1; }
+// Breite/Abstand der aktiven Ansicht (Leinwand und Tisch getrennt gespeichert).
+float& viewWidth() { return tableView() ? g.settings.tableWidth : g.settings.width; }
+float& viewDistance() { return tableView() ? g.settings.tableDistance : g.settings.distance; }
+
+XrPosef panelPose() {
+  if (tableView()) {
+    XrVector3f head = g.anchor;
+    head.y += kBelowEyes;  // Anker liegt kBelowEyes unter Blickhöhe
+    return tablePoseFor(head, g.yaw, g.settings.tableDistance, g.settings.tableTilt, g.settings.tableLower);
+  }
+  return panelPoseFor(g.anchor, g.yaw, g.settings.distance);
+}
 
 float panelHeight() {
-  return g.game.width > 0 ? g.settings.width * static_cast<float>(g.game.height) / static_cast<float>(g.game.width)
-                          : g.settings.width * 0.625f;
+  return g.game.width > 0 ? viewWidth() * static_cast<float>(g.game.height) / static_cast<float>(g.game.width)
+                          : viewWidth() * 0.625f;
 }
 
 float menuHeight() { return kMenuWidth * static_cast<float>(VrMenu::kHeight) / static_cast<float>(VrMenu::kWidth); }
 
-void clampPanel() { clampPanelSize(&g.settings.width, &g.settings.distance); }
+void clampPanel() {
+  Settings& st = g.settings;
+  if (tableView()) {
+    clampTable(&st.tableWidth, &st.tableDistance, &st.tableTilt, &st.tableLower);
+  } else {
+    clampPanelSize(&st.width, &st.distance);
+  }
+}
 
 // Start/Neuzentrierung: nur Yaw aus der Kopfrotation, Pitch nicht.
 void recenter(const XrPosef& head) {
@@ -535,7 +623,7 @@ void recenter(const XrPosef& head) {
   clampPanel();
   g.centered = true;
   XLOGI("window", "zentriert: Breite %.2f m, Abstand %.2f m, Richtung %.0f°, Kopf %.2f/%.2f/%.2f",
-        g.settings.width, g.settings.distance, g.yaw * 57.2958f, head.position.x, head.position.y,
+        viewWidth(), viewDistance(), g.yaw * 57.2958f, head.position.x, head.position.y,
         head.position.z);
 }
 
@@ -569,7 +657,7 @@ void saveSoon() { g.saveTimer = kSaveDelay; }
 std::string statusLine() {
   char text[256];
   std::snprintf(text, sizeof(text), "Spiel %.0f fps - XR %.0f Hz - Fenster %.1f m, %.1f m entfernt%s%s", g.lastFps,
-                g.lastXrHz, g.settings.width, g.settings.distance, g.menuNote.empty() ? "" : " - ",
+                g.lastXrHz, viewWidth(), viewDistance(), g.menuNote.empty() ? "" : " - ",
                 g.menuNote.c_str());
   return text;
 }
@@ -581,7 +669,7 @@ void logDiagnose() {
   XLOGI("diagnose", "Session %s, Profil %s, Zeigerhand %s, Ladeanzeige %s", stateName(g.sessionState),
         g.profile.c_str(), g.settings.pointerHand ? "rechts" : "links", stepName(g.load.step));
   XLOGI("diagnose", "Fenster: Breite %.2f m, Höhe %.2f m, Abstand %.2f m, Mitte %.2f/%.2f/%.2f, Richtung %.0f°",
-        g.settings.width, panelHeight(), g.settings.distance, panel.position.x, panel.position.y,
+        viewWidth(), panelHeight(), viewDistance(), panel.position.x, panel.position.y,
         panel.position.z, g.yaw * 57.2958f);
   XLOGI("diagnose", "Kopf %s %.2f/%.2f/%.2f", g.headValid ? "gültig" : "ungültig", g.head.position.x,
         g.head.position.y, g.head.position.z);
@@ -691,7 +779,10 @@ void updateLoader(float dt) {
       }
       break;
     case LoadStep::kGame:
-      if (g.load.stepSeconds >= kGameStepSeconds && g.hasGameFrame) setStep(LoadStep::kDone);
+      if (g.load.stepSeconds >= kGameStepSeconds && g.hasGameFrame &&
+          (!currentGame().loaderTip || g.load.seconds >= kLoaderTipSeconds)) {
+        setStep(LoadStep::kDone);
+      }
       break;
     case LoadStep::kDone:
       break;
@@ -1277,6 +1368,7 @@ void runMenuAction(const MenuHit& hit) {
     case MenuAction::kClose: closeAfter = true; break;
     case MenuAction::kTabGame: g.vrMenu.setPage(kPageGame); break;
     case MenuAction::kTabWindow: g.vrMenu.setPage(kPageWindow); break;
+    case MenuAction::kTabControls: g.vrMenu.setPage(kPageControls); break;
     case MenuAction::kTabDisplay: g.vrMenu.setPage(kPageDisplay); break;
     case MenuAction::kQuit:
       if (g.quitConfirm.click() == ConfirmAction::kArmed) {
@@ -1331,14 +1423,37 @@ void runMenuAction(const MenuHit& hit) {
     // Fenster & Bild
     case MenuAction::kRecenter: g.centered = false; break;
     case MenuAction::kResetWindow:
-      st.width = kDefaultWidth;
-      st.distance = kDefaultDistance;
+      if (tableView()) {
+        st.tableWidth = kDefaultTableWidth;
+        st.tableDistance = kDefaultTableDistance;
+        st.tableTilt = Settings{}.tableTilt;
+        st.tableLower = Settings{}.tableLower;
+      } else {
+        st.width = kDefaultWidth;
+        st.distance = kDefaultDistance;
+      }
       g.centered = false;
       break;
-    case MenuAction::kSmaller: st.width -= kMenuStep; clampPanel(); break;
-    case MenuAction::kLarger: st.width += kMenuStep; clampPanel(); break;
-    case MenuAction::kCloser: st.distance -= kMenuStep; clampPanel(); break;
-    case MenuAction::kFarther: st.distance += kMenuStep; clampPanel(); break;
+    case MenuAction::kSmaller: viewWidth() -= kMenuStep; clampPanel(); break;
+    case MenuAction::kLarger: viewWidth() += kMenuStep; clampPanel(); break;
+    case MenuAction::kCloser: viewDistance() -= kMenuStep; clampPanel(); break;
+    case MenuAction::kFarther: viewDistance() += kMenuStep; clampPanel(); break;
+    case MenuAction::kToggleView:
+      st.view = tableView() ? 0 : 1;
+      clampPanel();
+      g.centered = false;  // neu vor dem Kopf ausrichten
+      XLOGI("window", "Ansicht: %s", tableView() ? "Tisch" : "Leinwand");
+      break;
+    case MenuAction::kTilt:
+      st.tableTilt += kTiltStep * static_cast<float>(hit.value);
+      clampPanel();
+      break;
+    case MenuAction::kTableLower:
+      st.tableLower += kLowerStep * static_cast<float>(hit.value);
+      clampPanel();
+      break;
+    case MenuAction::kScrollSpeed: st.scrollSpeed = std::clamp(st.scrollSpeed + hit.value, 1, 10); break;
+    case MenuAction::kCycleDrag: st.dragSpeed = (st.dragSpeed + 1) % 4; break;
     case MenuAction::kToggleHand:
       st.pointerHand = st.pointerHand ? 0 : 1;
       releaseAll("Zeigerhand gewechselt");
@@ -1364,6 +1479,12 @@ void runMenuAction(const MenuHit& hit) {
     case MenuAction::kContrast: slider(st.image.contrast, hit.value); break;
     case MenuAction::kSharpness: slider(st.image.sharpness, hit.value); break;
     case MenuAction::kCycleCrt: st.image.crt = (st.image.crt + 1) % 3; break;
+    case MenuAction::kPointerOffsetX:
+      st.pointerOffsetX = ptroff::stepPercent(st.pointerOffsetX, hit.value);
+      break;
+    case MenuAction::kPointerOffsetY:
+      st.pointerOffsetY = ptroff::stepPercent(st.pointerOffsetY, hit.value);
+      break;
   }
   saveSettings(st);
   if (closeAfter) closeMenu();
@@ -1483,7 +1604,7 @@ void processGameInput(const XrPosef& aim, bool tracked, float dt) {
   XrVector3f point{};
   bool onPanel = false;
   ++g.pointerFrames;
-  if (tracked && hitQuad(aim, panelPose(), g.settings.width, panelHeight(), &u, &v, &point)) {
+  if (tracked && hitQuad(aim, panelPose(), viewWidth(), panelHeight(), &u, &v, &point)) {
     bool inside = u >= 0.0f && u <= 1.0f && v >= 0.0f && v <= 1.0f;
     bool dragging = g.leftClick.down() || g.rightClick.down();
     onPanel = inside;
@@ -1504,13 +1625,14 @@ void processGameInput(const XrPosef& aim, bool tracked, float dt) {
         g.pointerU = newU;
         g.pointerV = newV;
         g.pointerValid = true;
-        if (moved) requestWarp();
+        if (moved && g.pan == State::Pan::kNone) requestWarp();
       }
     }
   }
 
   // --- Klicks (Zeigerhand): Trigger = links (auswählen, Rahmen ziehen), Griff = rechts (Befehl)
   int trig = g.leftClick.update(actionFloat(g.trigger, ph));
+  if (trig > 0 && (g.pan == State::Pan::kStick || g.pan == State::Pan::kArming)) endPan();
   if (trig > 0) {
     if (onPanel) {
       g.freezeLeft = kClickFreeze;
@@ -1523,30 +1645,100 @@ void processGameInput(const XrPosef& aim, bool tracked, float dt) {
   } else if (trig < 0) {
     sendMouseButton(SDL_BUTTON_LEFT, false);
   }
+  // Griff der Zeigerhand: kurz = Rechtsklick (Befehl, beim Loslassen); halten und ziehen = Karte greifen.
   int grip = g.rightClick.update(actionFloat(g.grip, ph));
   if (grip > 0) {
     if (onPanel) {
-      sendMouseButton(SDL_BUTTON_RIGHT, true);  // Down sofort, Up erst beim Loslassen
-      pulse();
+      g.gripPending = true;
+      g.gripHeld = 0.0f;
+      g.gripStartU = g.pointerU;
+      g.gripStartV = g.pointerV;
     } else {
       g.rightClick.reset();
     }
-  } else if (grip < 0) {
-    sendMouseButton(SDL_BUTTON_RIGHT, false);
+  }
+  if (g.gripPending && g.rightClick.down()) {
+    g.gripHeld += dt;
+    const float aspect = viewWidth() > 0.0f ? panelHeight() / viewWidth() : 0.625f;
+    const float du = g.pointerU - g.gripStartU, dv = (g.pointerV - g.gripStartV) * aspect;
+    if (std::sqrt(du * du + dv * dv) > kGripDragStart || g.gripHeld > kGripDragHold) {
+      g.gripPending = false;
+      if (g.pan == State::Pan::kStick || g.pan == State::Pan::kArming) endPan();
+      // Startpunkt dort, wo der Griff gedrückt wurde: von dort aus wird gezogen.
+      const float u0 = g.pointerU, v0 = g.pointerV;
+      g.pointerU = g.gripStartU;
+      g.pointerV = g.gripStartV;
+      pointerToWindow(&g.panX, &g.panY);
+      g.pointerU = u0;
+      g.pointerV = v0;
+      g.panLastU = g.gripStartU;
+      g.panLastV = g.gripStartV;
+      g.panAccX = g.panAccY = 0.0f;
+      requestWarpTo(g.panX, g.panY);
+      sendMouseButtonAt(SDL_BUTTON_MIDDLE, true, g.panX, g.panY);
+      g.pan = State::Pan::kGrip;
+      pulse();
+      if (inputLogging()) XLOGD("input", "Karte greifen bei %d,%d", g.panX, g.panY);
+    }
+  }
+  if (grip < 0) {
+    if (g.gripPending) {
+      g.gripPending = false;
+      sendMouseButton(SDL_BUTTON_RIGHT, true);
+      sendMouseButton(SDL_BUTTON_RIGHT, false);
+      pulse();
+    } else if (g.pan == State::Pan::kGrip) {
+      endPan();
+    }
+  }
+  if (g.pan == State::Pan::kGrip) {
+    // Karte folgt der Hand: Zeiger nach rechts → Karteninhalt nach rechts (Ausschnitt nach links).
+    const int w = std::max(1, s.windowW.load()), h = std::max(1, s.windowH.load());
+    const float k = mapmove::dragFactor(g.settings.dragSpeed) / static_cast<float>(currentGame().mouseScrollSpeed);
+    panBy(-(g.pointerU - g.panLastU) * static_cast<float>(w) * k, -(g.pointerV - g.panLastV) * static_cast<float>(h) * k);
+    g.panLastU = g.pointerU;
+    g.panLastV = g.pointerV;
   }
 
-  // --- Stick der Zeigerhand: Karte scrollen (Pfeiltasten, Kanten-Scrollen ist aus);
-  //     Stick drücken = Auswahl zentrieren.
+  // --- Stick der Zeigerhand: Karte stufenlos scrollen (Tempo im VR-Menü), Stick drücken = Auswahl zentrieren.
   XrVector2f rs = actionStick(ph);
   float sx = applyDeadzone(rs.x);
   float sy = applyDeadzone(rs.y);
-  setHeld(g.keys.right, sx > 0.0f, SDLK_RIGHT);
-  setHeld(g.keys.left, sx < 0.0f, SDLK_LEFT);
-  setHeld(g.keys.up, sy > 0.0f, SDLK_UP);
-  setHeld(g.keys.down, sy < 0.0f, SDLK_DOWN);
+  const bool stickMove = (sx != 0.0f || sy != 0.0f) && g.pan != State::Pan::kGrip && !g.leftClick.down() &&
+                         !g.gripPending;
+  if (stickMove) {
+    if (g.pan == State::Pan::kNone) {
+      // Startpunkt über der Karte: der Zeiger, wenn er mittig liegt, sonst die Kartenmitte des Spielpakets.
+      const bool central = g.pointerValid && g.pointerU > 0.3f && g.pointerU < 0.95f && g.pointerV > 0.1f &&
+                           g.pointerV < 0.9f;
+      const float u = central ? g.pointerU : currentGame().mapCenterU;
+      const float v = central ? g.pointerV : currentGame().mapCenterV;
+      g.panX = static_cast<int>(u * static_cast<float>(std::max(1, s.windowW.load()) - 1));
+      g.panY = static_cast<int>(v * static_cast<float>(std::max(1, s.windowH.load()) - 1));
+      g.panAccX = g.panAccY = 0.0f;
+      requestWarpTo(g.panX, g.panY);
+      g.pan = State::Pan::kArming;  // erst die Maus an den Startpunkt, im nächsten Frame drücken
+    } else if (g.pan == State::Pan::kArming) {
+      if (!s.warpPending.load()) {
+        sendMouseButtonAt(SDL_BUTTON_MIDDLE, true, g.panX, g.panY);
+        g.pan = State::Pan::kStick;
+      }
+    } else if (g.pan == State::Pan::kStick) {
+      // Ausschnitt in Spielpixeln/Frame → Mausweg in Fensterpixeln (Stratagus: Tempo × logische Pixel).
+      const int w = std::max(1, s.windowW.load());
+      const int lw = s.logicalW.load() > 0 ? s.logicalW.load() : w;
+      const float viewPx = mapmove::stickViewsPerSecond(g.settings.scrollSpeed) * static_cast<float>(lw) * dt;
+      const float toWindow = static_cast<float>(w) / static_cast<float>(lw) /
+                             static_cast<float>(currentGame().mouseScrollSpeed);
+      panBy(mapmove::stickCurve(sx) * viewPx * toWindow, -mapmove::stickCurve(sy) * viewPx * toWindow);
+    }
+  } else if (g.pan == State::Pan::kStick || g.pan == State::Pan::kArming) {
+    endPan();
+  }
   if (g.pressStick.update(actionBool(g.stickClick, g.hand[ph]), dt) == PressButton::kShort) tapChar('c');
 
-  // --- Griff der anderen Hand halten: Fenster mit deren Stick verstellen (sonst gesperrt)
+  // --- Griff der anderen Hand halten: Hand heranziehen/wegschieben = Fenster/Tisch größer/kleiner (Zoom);
+  //     mit deren Stick wie bisher Breite/Abstand, Stick drücken = zurücksetzen.
   g.adjustGrip.update(actionFloat(g.grip, oh));
   bool adjustStick = actionBool(g.stickClick, g.hand[oh]);
   if (g.adjustGrip.down()) {
@@ -1554,25 +1746,51 @@ void processGameInput(const XrPosef& aim, bool tracked, float dt) {
     float lx = applyDeadzone(ls.x);
     float ly = applyDeadzone(ls.y);
     if (lx != 0.0f || ly != 0.0f) {
-      g.settings.width += lx * kAdjustSpeed * dt;
-      g.settings.distance -= ly * kAdjustSpeed * dt;
+      viewWidth() += lx * kAdjustSpeed * dt;
+      viewDistance() -= ly * kAdjustSpeed * dt;
       clampPanel();
       g.adjusting = true;
+      g.zoomActive = false;  // Zoom setzt danach neu auf
       saveSoon();
-    } else if (g.adjusting) {
-      g.adjusting = false;
-      XLOGI("window", "verstellt: Breite %.2f m, Abstand %.2f m", g.settings.width, g.settings.distance);
+    } else {
+      XrSpaceLocation hand{XR_TYPE_SPACE_LOCATION};
+      if (XR_SUCCEEDED(xrLocateSpace(g.aimSpace[oh], g.localSpace, g.frameTime, &hand)) &&
+          (hand.locationFlags & XR_SPACE_LOCATION_POSITION_VALID_BIT)) {
+        if (!g.zoomActive) {
+          g.zoomActive = true;
+          g.zoomHand0 = hand.pose.position;
+          g.zoomWidth0 = viewWidth();
+          pulse();
+        } else {
+          const XrVector3f forward = rotate(yawQuat(g.yaw), {0.0f, 0.0f, -1.0f});
+          const float away = dot(sub(hand.pose.position, g.zoomHand0), forward);
+          const float width = g.zoomWidth0 * std::exp(-away * kZoomPerMeter);
+          if (std::fabs(width - viewWidth()) > 1e-4f) {
+            viewWidth() = width;
+            clampPanel();
+            g.adjusting = true;
+            saveSoon();
+          }
+        }
+      }
     }
     if (g.pressAdjustStick.update(adjustStick, dt) == PressButton::kShort) {
-      g.settings.width = kDefaultWidth;
-      g.settings.distance = kDefaultDistance;
+      if (tableView()) {
+        g.settings.tableWidth = kDefaultTableWidth;
+        g.settings.tableDistance = kDefaultTableDistance;
+      } else {
+        g.settings.width = kDefaultWidth;
+        g.settings.distance = kDefaultDistance;
+      }
       g.centered = false;
       saveSoon();
       XLOGI("window", "zurückgesetzt");
     }
   } else {
+    if (g.adjusting) XLOGI("window", "verstellt: Breite %.2f m, Abstand %.2f m", viewWidth(), viewDistance());
     g.pressAdjustStick.update(false, dt);
     g.adjusting = false;
+    g.zoomActive = false;
   }
 
   // --- Tasten
@@ -1676,6 +1894,16 @@ void processInput(XrTime time, float dt) {
     // Menütaste bleibt erreichbar, B schließt die Tastatur.
     if (g.pressMenu.update(actionBool(g.menuButton), dt) == PressButton::kShort) openMenu(time);
     if (g.pressB.update(actionBool(g.buttonB), dt) == PressButton::kShort) closeKeyboard("B");
+  } else if (currentGame().loaderTip && g.load.step == LoadStep::kGame && loaderVisible()) {
+    // Ladebild mit Spieltipp: Trigger/A/B blenden es aus (nichts geht ans Spiel). Danach Tasten
+    // re-armen, damit der gehaltene Trigger nicht als Klick ins Spiel durchschlägt.
+    bool pressed = actionFloat(g.trigger, pointerHand()) > 0.55f || actionBool(g.buttonA) || actionBool(g.buttonB);
+    if (pressed && g.hasGameFrame) {
+      XLOGI("loader", "Spieltipp per Taste geschlossen");
+      setStep(LoadStep::kDone);
+      releaseAll("Spieltipp geschlossen");
+      g.shiftNeedsRelease = true;
+    }
   } else {
     processGameInput(aim.pose, tracked, dt);
   }
@@ -1873,7 +2101,7 @@ void frame() {
         release(g.loader);
         panelQuad.subImage.swapchain = g.loader.handle;
         panelQuad.subImage.imageRect = {{0, 0}, {g.loader.width, g.loader.height}};
-        panelQuad.size = {g.settings.width, g.settings.width * static_cast<float>(LoaderPanel::kHeight) /
+        panelQuad.size = {viewWidth(), viewWidth() * static_cast<float>(LoaderPanel::kHeight) /
                                                 static_cast<float>(LoaderPanel::kWidth)};
         layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&panelQuad);
       }
@@ -1887,7 +2115,7 @@ void frame() {
       release(g.game);
       panelQuad.subImage.swapchain = g.game.handle;
       panelQuad.subImage.imageRect = {{0, 0}, {g.game.width, g.game.height}};
-      panelQuad.size = {g.settings.width, panelHeight()};
+      panelQuad.size = {viewWidth(), panelHeight()};
       layers[layerCount++] = reinterpret_cast<const XrCompositionLayerBaseHeader*>(&panelQuad);
     }
 
@@ -2133,6 +2361,10 @@ bool presentFrame(SDL_Renderer* renderer, SDL_Window* window) {
   SDL_RenderFlush(renderer);
   int ww = 0, wh = 0;
   SDL_GetWindowSize(window, &ww, &wh);
+  int lw = 0, lh = 0;
+  SDL_RenderGetLogicalSize(renderer, &lw, &lh);
+  s.logicalW = lw > 0 ? lw : ww;
+  s.logicalH = lh > 0 ? lh : wh;
   s.windowW = ww;
   s.windowH = wh;
   s.windowId = SDL_GetWindowID(window);

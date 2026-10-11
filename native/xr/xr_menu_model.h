@@ -7,6 +7,8 @@
 #pragma once
 
 #include <cmath>
+#include <cstdio>
+#include <string>
 
 namespace xrs {
 
@@ -111,6 +113,62 @@ inline void stickDirection(float x, float y, int* dx, int* dy, float threshold =
     *dy = y > 0.0f ? -1 : 1;
   }
 }
+
+// Zeiger-Versatz X/Y (P3 „Zeiger waagerecht/senkrecht"): korrigiert, wenn der spieleigene Mauszeiger
+// neben dem Laserpunkt sitzt. Prozent der Bildbreite/-höhe, Raster 0,25 %, ±15 %; wirkt auf die Laser-UV vor
+// der Abbildung auf Spielkoordinaten (nicht im VR-Menü). Vorbild XRShell pointer_map.h.
+// TODO xrc/menu.h: inhaltsgleich mit xrc::ptroff (XR/_shared/xr-common, ungetaggt), Anzeige zusätzlich.
+namespace ptroff {
+constexpr float kStep = 0.25f;
+constexpr float kMax = 15.0f;
+
+// Aufs Raster runden und klemmen; NaN/Inf -> 0.
+inline float clampPercent(float p) {
+  if (!std::isfinite(p)) return 0.0f;
+  p = std::round(p / kStep) * kStep;
+  if (p == 0.0f) p = 0.0f;  // kein „−0"
+  return p < -kMax ? -kMax : p > kMax ? kMax : p;
+}
+// ‹ (step = −1) bzw. › (step = +1).
+inline float stepPercent(float p, int step) { return clampPercent(p + kStep * static_cast<float>(step)); }
+// Laser-UV (0..1) -> verschobene UV fürs Spiel, am Bildrand geklemmt.
+inline float apply(float uv, float percent) {
+  const float v = uv + clampPercent(percent) / 100.0f;
+  return v < 0.0f ? 0.0f : v > 1.0f ? 1.0f : v;
+}
+// Anzeige: „0", „+1,25 %", „−0,50 %" (deutsches Komma, echtes Minuszeichen).
+inline std::string format(float percent) {
+  const float p = clampPercent(percent);
+  if (p == 0.0f) return "0";
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.2f", static_cast<double>(std::fabs(p)));
+  std::string s = buf;
+  for (char& c : s) {
+    if (c == '.') c = ',';
+  }
+  return std::string(p < 0.0f ? "−" : "+") + s + " %";
+}
+}  // namespace ptroff
+
+// Karte bewegen (Stick/Griff): Tempo-Stufen fürs VR-Menü.
+namespace mapmove {
+// Stick voll ausgelenkt: Anteil der Fensterbreite pro Sekunde; Stufe 1–10, je Stufe ×1,3 (Stufe 5 ≈ 0,34).
+inline float stickViewsPerSecond(int level) {
+  level = level < 1 ? 1 : level > 10 ? 10 : level;
+  return 0.12f * std::pow(1.3f, static_cast<float>(level - 1));
+}
+// Kennlinie: quadratisch für feines Scrollen bei kleinem Ausschlag, Vorzeichen bleibt.
+inline float stickCurve(float s) { return s * std::fabs(s); }
+// Kartenziehen mit dem Griff: Faktor je Stufe (1 = Karte folgt der Hand 1:1).
+inline float dragFactor(int index) {
+  static const float kFactors[] = {1.0f, 1.5f, 2.0f, 3.0f};
+  return kFactors[index < 0 ? 0 : index > 3 ? 3 : index];
+}
+inline const char* dragLabel(int index) {
+  static const char* kLabels[] = {"1x", "1,5x", "2x", "3x"};
+  return kLabels[index < 0 ? 0 : index > 3 ? 3 : index];
+}
+}  // namespace mapmove
 
 // Die drei Pflicht-„Aus“-Schalter. Gespeichert werden die Felder, abgefragt über die Funktionen.
 struct PointerVisibility {

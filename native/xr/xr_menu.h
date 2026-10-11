@@ -24,7 +24,7 @@ namespace xrs {
 enum class MenuAction {
   // Navigation
   kOpenSettings, kBack, kClose,
-  kTabGame, kTabWindow, kTabDisplay,
+  kTabGame, kTabWindow, kTabControls, kTabDisplay,
   // Schnellmenü
   kResume, kRecenter, kTogglePassthrough, kGameMenu, kKeyboard, kQuit,
   // Gruppen (Schnellmenü)
@@ -33,9 +33,13 @@ enum class MenuAction {
   kPause, kSave, kLoad, kSpeedUp, kSpeedDown, kIdleWorker, kLastMessage, kCenterSelection, kSkipMovie,
   kToggleAutoSkip, kHelp, kToggleInputLog, kDiagnose,
   // Fenster
-  kResetWindow, kSmaller, kLarger, kCloser, kFarther, kToggleHand, kToggleMenuStyle,
+  kResetWindow, kSmaller, kLarger, kCloser, kFarther, kToggleView,
+  kTilt, kTableLower,  // value = −1 / +1 (Tisch: Neigung in 5°, Höhe in 5 cm)
+  // Steuerung
+  kToggleHand, kCycleDrag, kScrollSpeed /* value ±1 */,
+  kPointerOffsetX, kPointerOffsetY,  // value = −1 (‹ links/oben) / +1 (› rechts/unten)
   // Anzeige
-  kToggleBeam, kCycleTarget, kToggleGameCursor, kImageReset, kCycleCrt,
+  kToggleBeam, kCycleTarget, kToggleGameCursor, kImageReset, kCycleCrt, kToggleMenuStyle,
   kBrightness, kContrast, kSaturation, kSharpness,  // value = Änderung (−10 / +10)
 };
 
@@ -45,6 +49,8 @@ inline bool menuActionRepeats(MenuAction a) {
     case MenuAction::kSmaller: case MenuAction::kLarger: case MenuAction::kCloser: case MenuAction::kFarther:
     case MenuAction::kBrightness: case MenuAction::kContrast: case MenuAction::kSaturation:
     case MenuAction::kSharpness: case MenuAction::kSpeedUp: case MenuAction::kSpeedDown:
+    case MenuAction::kPointerOffsetX: case MenuAction::kPointerOffsetY:
+    case MenuAction::kTilt: case MenuAction::kTableLower: case MenuAction::kScrollSpeed:
       return true;
     default:
       return false;
@@ -53,8 +59,8 @@ inline bool menuActionRepeats(MenuAction a) {
 
 enum class GroupMode { kSelect = 0, kStore = 1, kAdd = 2 };
 
-// Seiten: 0 = Schnellmenü, 1–3 = Einstellungsreiter.
-enum MenuPage { kPageQuick = 0, kPageGame = 1, kPageWindow = 2, kPageDisplay = 3 };
+// Seiten: 0 = Schnellmenü, 1–4 = Einstellungsreiter.
+enum MenuPage { kPageQuick = 0, kPageGame = 1, kPageWindow = 2, kPageControls = 3, kPageDisplay = 4 };
 
 struct MenuHit {
   MenuAction action;

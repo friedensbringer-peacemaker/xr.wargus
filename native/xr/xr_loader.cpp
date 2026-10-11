@@ -22,6 +22,7 @@ constexpr Rgb kDone{90, 190, 120};
 constexpr Rgb kActive{240, 190, 70};
 constexpr Rgb kPending{70, 78, 92};
 constexpr Rgb kError{235, 90, 80};
+constexpr Rgb kTipBack{28, 30, 38};
 
 constexpr int kMargin = 56;
 
@@ -122,6 +123,30 @@ void LoaderPanel::render(const LoaderState& s, float progress) {
     canvas_.fillRect(kMargin, y - 22, 22, 22, dot);
     canvas_.drawText(stepText(i), kMargin + 40, y, 28, i <= current ? kText : kDim);
     y += 52;
+  }
+
+  // Spieltipp (aus dem Spielpaket): heller Kasten unter den Schritten
+  if (const char* tip = currentGame().loaderTip) {
+    const int boxY = 530, boxH = 150;
+    canvas_.fillRect(kMargin - 12, boxY, contentW + 24, boxH, kTipBack);
+    canvas_.fillRect(kMargin - 12, boxY, 6, boxH, kActive);
+    canvas_.drawText("Tipp", kMargin + 4, boxY + 34, 28, kActive);
+    int ty = boxY + 70;
+    std::string text = tip;
+    for (size_t start = 0; start <= text.size();) {
+      size_t end = text.find('\n', start);
+      if (end == std::string::npos) end = text.size();
+      canvas_.drawText(text.substr(start, end - start), kMargin + 4, ty, 23, kText);
+      ty += 30;
+      start = end + 1;
+    }
+    if (s.step == LoadStep::kGame) {
+      canvas_.drawText("Trigger, A oder B: weiter", kMargin, kHeight - 24, 22, kActive);
+    }
+    char elapsed[48];
+    std::snprintf(elapsed, sizeof(elapsed), "seit %d s", static_cast<int>(s.seconds));
+    canvas_.drawText(elapsed, kMargin + contentW - canvas_.textWidth(elapsed, 22), kHeight - 24, 22, kDim);
+    return;
   }
 
   // Bitte um Geduld + Laufzeit

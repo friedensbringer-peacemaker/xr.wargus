@@ -182,9 +182,52 @@ void testRepeat() {
   check(dx == -1 && dy == 0, "Stick links");
 }
 
+// Karte bewegen: Stick-Tempo steigt je Stufe, klemmt 1–10; Kennlinie quadratisch mit Vorzeichen; Ziehfaktoren.
+void testMapMove() {
+  float last = 0.0f;
+  for (int level = 1; level <= 10; ++level) {
+    const float v = mapmove::stickViewsPerSecond(level);
+    check(v > last, "Scrolltempo steigt", v, last);
+    last = v;
+  }
+  check(std::fabs(mapmove::stickViewsPerSecond(5) - 0.3427f) < 1e-3f, "Stufe 5 ~ 0,34 Fensterbreiten/s");
+  check(mapmove::stickViewsPerSecond(0) == mapmove::stickViewsPerSecond(1) &&
+            mapmove::stickViewsPerSecond(99) == mapmove::stickViewsPerSecond(10),
+        "Scrolltempo geklemmt");
+  check(mapmove::stickCurve(0.5f) == 0.25f && mapmove::stickCurve(-0.5f) == -0.25f && mapmove::stickCurve(1.0f) == 1.0f,
+        "Stick-Kennlinie");
+  check(mapmove::dragFactor(0) == 1.0f && mapmove::dragFactor(3) == 3.0f && mapmove::dragFactor(9) == 3.0f &&
+            mapmove::dragFactor(-1) == 1.0f,
+        "Ziehfaktor");
+}
+
+// P3 Zeiger-Versatz: Raster 0,25 %, ±15 %, NaN -> 0, UV-Verschiebung am Rand geklemmt, Anzeige.
+void testPointerOffset() {
+  check(ptroff::clampPercent(0.3f) == 0.25f, "Raster 0,25", ptroff::clampPercent(0.3f));
+  check(ptroff::clampPercent(99.0f) == 15.0f && ptroff::clampPercent(-99.0f) == -15.0f, "±15 % geklemmt");
+  check(ptroff::clampPercent(std::nanf("")) == 0.0f, "NaN -> 0");
+  check(ptroff::clampPercent(INFINITY) == 0.0f, "Inf -> 0");
+  check(!std::signbit(ptroff::clampPercent(-0.1f)), "kein -0");
+  float p = 0.0f;
+  for (int i = 0; i < 100; ++i) p = ptroff::stepPercent(p, 1);
+  check(p == 15.0f, "Dauerdruck › endet bei +15 %", p);
+  for (int i = 0; i < 200; ++i) p = ptroff::stepPercent(p, -1);
+  check(p == -15.0f, "Dauerdruck ‹ endet bei −15 %", p);
+  check(std::fabs(ptroff::apply(0.5f, 1.25f) - 0.5125f) < 1e-6f, "UV + 1,25 %");
+  check(std::fabs(ptroff::apply(0.5f, -0.5f) - 0.495f) < 1e-6f, "UV − 0,5 %");
+  check(ptroff::apply(0.99f, 15.0f) == 1.0f && ptroff::apply(0.01f, -15.0f) == 0.0f, "am Bildrand geklemmt");
+  check(ptroff::apply(0.3f, 0.0f) == 0.3f, "0 % ändert nichts");
+  check(ptroff::format(0.0f) == "0", "Anzeige 0");
+  check(ptroff::format(1.25f) == "+1,25 %", "Anzeige +1,25 %");
+  check(ptroff::format(-0.5f) == "−0,50 %", "Anzeige −0,50 %");
+  check(ptroff::format(std::nanf("")) == "0", "Anzeige NaN");
+}
+
 }  // namespace
 
 int main() {
+  testMapMove();
+  testPointerOffset();
   testRepeat();
   testAnalog();
   testConfirmAndVisibility();

@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "xr_log.h"
+#include "xr_menu_model.h"
 
 namespace xrs {
 namespace {
@@ -38,6 +39,13 @@ Settings loadSettings() {
     if (!std::strcmp(key, "pointer_hand")) s.pointerHand = std::atoi(value) == 0 ? 0 : 1;
     else if (!std::strcmp(key, "width")) s.width = std::strtof(value, nullptr);
     else if (!std::strcmp(key, "distance")) s.distance = std::strtof(value, nullptr);
+    else if (!std::strcmp(key, "view")) s.view = std::atoi(value) == 1 ? 1 : 0;
+    else if (!std::strcmp(key, "table_width")) s.tableWidth = std::strtof(value, nullptr);
+    else if (!std::strcmp(key, "table_distance")) s.tableDistance = std::strtof(value, nullptr);
+    else if (!std::strcmp(key, "table_tilt")) s.tableTilt = std::strtof(value, nullptr);
+    else if (!std::strcmp(key, "table_lower")) s.tableLower = std::strtof(value, nullptr);
+    else if (!std::strcmp(key, "scroll_speed")) s.scrollSpeed = std::clamp(std::atoi(value), 1, 10);
+    else if (!std::strcmp(key, "drag_speed")) s.dragSpeed = std::clamp(std::atoi(value), 0, 3);
     else if (!std::strcmp(key, "beam")) s.beam = std::atoi(value) != 0;
     else if (!std::strcmp(key, "target")) s.target = static_cast<TargetStyle>(std::atoi(value) % 3);
     else if (!std::strcmp(key, "log_input")) s.logInput = std::atoi(value) != 0;
@@ -50,6 +58,8 @@ Settings loadSettings() {
     else if (!std::strcmp(key, "saturation")) s.image.saturation = slider(value);
     else if (!std::strcmp(key, "sharpness")) s.image.sharpness = slider(value);
     else if (!std::strcmp(key, "crt")) s.image.crt = std::clamp(std::atoi(value), 0, 2);
+    else if (!std::strcmp(key, "pointer_offset_x")) s.pointerOffsetX = ptroff::clampPercent(std::strtof(value, nullptr));
+    else if (!std::strcmp(key, "pointer_offset_y")) s.pointerOffsetY = ptroff::clampPercent(std::strtof(value, nullptr));
   }
   std::fclose(f);
   XLOGI("settings",
@@ -71,10 +81,13 @@ void saveSettings(const Settings& s) {
   std::fprintf(f,
                "pointer_hand=%d\nwidth=%.3f\ndistance=%.3f\nbeam=%d\ntarget=%d\nlog_input=%d\npassthrough=%d\n"
                "brightness=%d\ncontrast=%d\nsaturation=%d\nsharpness=%d\nauto_skip_movies=%d\nmenu_orc=%d\n"
-               "game_cursor=%d\ncrt=%d\n",
+               "game_cursor=%d\ncrt=%d\npointer_offset_x=%.2f\npointer_offset_y=%.2f\nview=%d\ntable_width=%.3f\ntable_distance=%.3f\ntable_tilt=%.1f\ntable_lower=%.1f\nscroll_speed=%d\ndrag_speed=%d\n",
                s.pointerHand, s.width, s.distance, s.beam ? 1 : 0, static_cast<int>(s.target), s.logInput ? 1 : 0,
                s.passthrough ? 1 : 0, s.image.brightness, s.image.contrast, s.image.saturation, s.image.sharpness,
-               s.autoSkipMovies ? 1 : 0, s.menuOrc ? 1 : 0, s.gameCursor ? 1 : 0, s.image.crt);
+               s.autoSkipMovies ? 1 : 0, s.menuOrc ? 1 : 0, s.gameCursor ? 1 : 0, s.image.crt,
+               static_cast<double>(s.pointerOffsetX), static_cast<double>(s.pointerOffsetY), s.view,
+               static_cast<double>(s.tableWidth), static_cast<double>(s.tableDistance),
+               static_cast<double>(s.tableTilt), static_cast<double>(s.tableLower), s.scrollSpeed, s.dragSpeed);
   std::fclose(f);
   std::rename(tmp.c_str(), path.c_str());
   XLOGD("settings", "gespeichert");

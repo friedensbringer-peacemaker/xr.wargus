@@ -257,6 +257,19 @@ void testLoader() {
     st.seconds += 1.0f;
     check(l.pixels(st) != nullptr && l.version() > last, "Ladeanzeige Schritt " + std::to_string(step));
     last = l.version();
+    if (st.step == LoadStep::kGame) save(l.pixels(st), LoaderPanel::kWidth, LoaderPanel::kHeight, "ladeanzeige.png");
+  }
+  // Spieltipp (War1gus: Straßenregel) passt in die Breite des Ladebilds
+  if (const char* tip = currentGame().loaderTip; tip && Canvas(1, 1).textWidth("x", 23) > 0) {
+    std::string text = tip;
+    Canvas probe(1, 1);
+    for (size_t start = 0; start <= text.size();) {
+      size_t end = text.find(static_cast<char>(10), start);
+      if (end == std::string::npos) end = text.size();
+      int w = probe.textWidth(text.substr(start, end - start), 23);
+      check(w > 0 && w <= LoaderPanel::kWidth - 2 * 56 - 8, "Spieltipp-Zeile passt (" + std::to_string(w) + " px)");
+      start = end + 1;
+    }
   }
   st.dataMissing = true;
   check(l.pixels(st) != nullptr && l.version() > last, "Ladeanzeige Daten fehlen");
@@ -284,16 +297,28 @@ void testSettings(const std::string& workDir) {
   s.image.saturation = 80;
   s.image.sharpness = 40;
   s.image.crt = 2;
+  s.pointerOffsetX = 1.25f;
+  s.pointerOffsetY = -0.5f;
+  s.view = 1;
+  s.tableWidth = 1.6f;
+  s.tableDistance = 0.9f;
+  s.tableTilt = 55.0f;
+  s.tableLower = 30.0f;
+  s.scrollSpeed = 8;
+  s.dragSpeed = 2;
   saveSettings(s);
   Settings r = loadSettings();
   check(r.pointerHand == 0 && std::fabs(r.width - 2.6f) < 1e-3f && std::fabs(r.distance - 2.2f) < 1e-3f && !r.beam &&
             r.target == TargetStyle::kDot && r.logInput && r.passthrough && r.autoSkipMovies && r.menuOrc &&
             !r.gameCursor && r.image.brightness == 70 && r.image.contrast == 30 && r.image.saturation == 80 &&
-            r.image.sharpness == 40 && r.image.crt == 2,
+            r.image.sharpness == 40 && r.image.crt == 2 && r.pointerOffsetX == 1.25f && r.pointerOffsetY == -0.5f && r.view == 1 &&
+            std::fabs(r.tableWidth - 1.6f) < 1e-3f && std::fabs(r.tableDistance - 0.9f) < 1e-3f &&
+            std::fabs(r.tableTilt - 55.0f) < 1e-3f && std::fabs(r.tableLower - 30.0f) < 1e-3f && r.scrollSpeed == 8 &&
+            r.dragSpeed == 2,
         "Einstellungen überstehen Speichern/Laden");
   // Kaputte Werte werden begrenzt statt übernommen.
   if (FILE* f = std::fopen(settingsPath().c_str(), "w")) {
-    std::fputs("brightness=250\ncontrast=-40\ntarget=7\npointer_hand=5\ncrt=9\nunbekannt=1\n", f);
+    std::fputs("brightness=250\ncontrast=-40\ntarget=7\npointer_hand=5\ncrt=9\npointer_offset_x=99\npointer_offset_y=nan\nview=7\nscroll_speed=99\ndrag_speed=-3\nunbekannt=1\n", f);
     std::fclose(f);
   }
   Settings b = loadSettings();
@@ -301,6 +326,8 @@ void testSettings(const std::string& workDir) {
   check(static_cast<int>(b.target) >= 0 && static_cast<int>(b.target) <= 2, "Zielpunkt gültig");
   check(b.pointerHand == 1, "Zeigerhand gültig");
   check(b.image.crt >= 0 && b.image.crt <= 2, "Bildmodus gültig");
+  check(b.pointerOffsetX == 15.0f && b.pointerOffsetY == 0.0f, "Zeiger-Versatz geklemmt, NaN -> 0");
+  check(b.view == 0 && b.scrollSpeed == 10 && b.dragSpeed == 0, "Ansicht/Scrolltempo/Ziehen geklemmt");
   std::remove(settingsPath().c_str());
 }
 

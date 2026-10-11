@@ -34,6 +34,14 @@ struct GameProfile {
   int fontCell;                 // Kantenlänge einer Glyphenzelle
   const char* prepareScript;    // Datensatz am PC erzeugen
   const char* importCommand;    // Datensatz auf die Quest bringen
+  // Spieltipp auf dem Ladebild (Zeilen mit \n getrennt) oder nullptr. Mit Tipp bleibt das Ladebild
+  // mindestens kLoaderTipSeconds stehen (Trigger/A/B: weiter), sonst wäre er nach ~1,4 s schon weg.
+  const char* loaderTip;
+  // Karte verschieben über die mittlere Maustaste (Stratagus MouseScrollMap): Pixel Kartenweg je Mauspixel
+  // (SetMouseScrollSpeedDefault des Pakets) und ungefähre Kartenmitte im Fenster (u, v), falls der Zeiger
+  // beim Stick-Scrollen nicht über der Karte liegt.
+  int mouseScrollSpeed;
+  float mapCenterU, mapCenterV;
 };
 
 namespace game_detail {
@@ -79,6 +87,9 @@ inline constexpr GameProfile kWargus{
     17,  // wie wargus/scripts/fonts.lua
     "scripts/prepare-data.sh",
     "scripts/quest.sh import-data",
+    nullptr,
+    4,  // wargus/scripts/stratagus.lua MouseScrollSpeedDefault
+    0.57f, 0.5f,  // Kartenfeld rechts der 176-px-Leiste
 };
 
 // War1gus-Menüs zeichnen Schaltflächen als Farbflächen (keine Knopfgrafiken) → Ersatz-Knöpfe;
@@ -99,6 +110,13 @@ inline constexpr GameProfile kWar1gus{
     14,  // wie war1gus/scripts/fonts.lua („large-title“; Codepage 437 wie die Wargus-Schrift)
     "scripts/prepare-data-war1.sh",
     "PKG=xr.wargus1 scripts/quest.sh import-data",
+    // Anders als in Warcraft II braucht jedes Gebäude außer dem Rathaus eine angrenzende Straße
+    // (war1gus/scripts/helpers.lua BuildingRules); im Spiel erklärt das nichts (Headset 03.10.2026).
+    "Gebäude brauchen eine Straße direkt daneben (außer dem Rathaus).\n"
+    "Straßen baut das Rathaus: Rathaus wählen, Build Road (R).\n"
+    "Lange Straßen: A halten (Umschalt), Trigger drücken und ziehen.",
+    1,  // war1gus/scripts/stratagus.lua SetMouseScrollSpeedDefault(1)
+    0.6f, 0.53f,
 };
 
 }  // namespace game_detail

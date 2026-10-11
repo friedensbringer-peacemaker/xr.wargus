@@ -44,9 +44,13 @@ int toCp437(uint32_t cp) {
     case 0xDF: return 0xE1;  // ß
     case 0xE9: return 0x82;  // é
     case 0xB7: return '-';   // ·
+    case 0xB0: return 0xF8;  // °
     case 0x2013: case 0x2014: return '-';
     case 0x2026: return '.';  // …
     case 0x2192: return '>';  // →
+    case 0x203A: return '>';  // ›
+    case 0x2039: return '<';  // ‹
+    case 0x2212: return '-';  // −
     case 0x2190: return '<';  // ←
     default: return 0;
   }

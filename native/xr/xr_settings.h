@@ -23,12 +23,23 @@ struct Settings {
   int pointerHand = 1;  // 0 = links, 1 = rechts
   float width = 2.0f;
   float distance = 1.8f;
+  // Tisch-Ansicht (Werte und Grenzen wie xr-common / XR-Settlers): Brett vor dem Kopf, gekippt
+  int view = 0;              // 0 = Leinwand, 1 = Tisch
+  float tableWidth = 1.4f;
+  float tableDistance = 1.0f;
+  float tableTilt = 45.0f;   // Grad aus der Senkrechten (30–75)
+  float tableLower = 40.0f;  // Tischmitte in cm unter Blickhöhe (0–90)
+  // Karte bewegen: Stick-Scrolltempo 1–10, Kartenziehen mit dem Griff (0 = 1×, 1 = 1,5×, 2 = 2×, 3 = 3×)
+  int scrollSpeed = 5;
+  int dragSpeed = 0;
   bool beam = true;
   TargetStyle target = TargetStyle::kRing;
   bool logInput = false;
   bool passthrough = false;
   bool autoSkipMovies = false;  // Filme (Intro, Zwischensequenzen) sofort überspringen
   bool menuOrc = false;         // VR-Menü im Ork- statt Menschenstil
+  float pointerOffsetX = 0.0f;  // Zeiger-Versatz in % der Bildbreite (+ = rechts), siehe ptroff
+  float pointerOffsetY = 0.0f;  // in % der Bildhöhe (+ = unten)
   bool gameCursor = true;       // spieleigener Mauszeiger (P3 „Spiel-Mauszeiger: Aus“)
   ImageSettings image;
 };

@@ -9,14 +9,16 @@ nach den Regeln aus den anderen XR-Ports (Skill `xr-quest-port`), angepasst an W
 |---|---|
 | Strahl der Zeigerhand (Standard rechts) | Mauszeiger |
 | Trigger (Zeigerhand) | Linksklick: auswählen; halten + ziehen = Auswahlrahmen |
-| Griff (Zeigerhand) | Rechtsklick: Befehl (bewegen, angreifen, ernten …) |
-| Stick (Zeigerhand) | Karte scrollen (Kanten-Scrollen ist aus) |
+| Griff (Zeigerhand) kurz | Rechtsklick beim Loslassen: Befehl (bewegen, angreifen, ernten …) |
+| Griff (Zeigerhand) halten + Hand bewegen | **Karte greifen und ziehen**, in alle Richtungen (Tempo: VR-Menü → Steuerung → „Karte ziehen“) |
+| Stick (Zeigerhand) | Karte stufenlos scrollen, auch schräg (Tempo: VR-Menü → Steuerung → „Scrolltempo“) |
 | Stick drücken (Zeigerhand) | Auswahl zentrieren |
 | A halten | Umschalt: Einheiten zur Auswahl hinzufügen/entfernen |
 | X halten | Strg (z. B. Strg + Klick) |
 | B | Escape: Befehl abbrechen, Dialog schließen, **Film überspringen**; schließt auch Menü/Tastatur |
 | Y kurz / lang | Pause / Spielmenü (F10) |
 | Linke Menütaste | VR-Menü |
+| Griff der anderen Hand halten + Hand heranziehen / wegschieben | **Zoom**: Fenster bzw. Tisch größer / kleiner |
 | Griff der anderen Hand + deren Stick | Fenster breiter/schmaler (links/rechts), näher/weiter (vor/zurück) |
 | … dazu Stick drücken | Fenster zurücksetzen und zentrieren |
 
@@ -53,11 +55,16 @@ machen die Oberfläche in VR unlesbar klein und werden beim Start auf 640×400 z
   Letzte Meldung, Auswahl zentrieren, **Film überspringen** (nur während eines Films),
   **Filme auslassen** (Intro und Kampagnenfilme automatisch überspringen, bleibt gespeichert),
   Eingaben loggen, Diagnose ins Log.
-- **Fenster:** zurücksetzen, Zeigerhand, kleiner/größer, näher/weiter, Menüstil Mensch/Ork.
+- **Fenster:** zurücksetzen, **Ansicht Leinwand / Tisch** (Tisch wie in Siedler: Spielbrett liegt gekippt
+  vor dir), kleiner/größer, näher/weiter; im Tisch zusätzlich **Neigung** (30–75° aus der Senkrechten, 5° je
+  Klick) und **Tisch höher/tiefer** (0–90 cm unter Blickhöhe). Größe und Abstand gelten je Ansicht.
+- **Steuerung:** Zeigerhand, **Karte ziehen 1x/1,5x/2x/3x** (wie stark die Karte der Hand folgt),
+  **Scrolltempo 1–10** (Stick), **Zeiger waagerecht / senkrecht** (‹ = links/oben, › = rechts/unten, je
+  0,25 %, bis ±15 %; gehalten wiederholt): verschiebt den Spiel-Mauszeiger gegenüber dem Laserpunkt.
 - **Anzeige:** Strahl an/aus, Zielpunkt Ring/Punkt/aus, **Spiel-Mauszeiger an/aus**, Bild
   zurücksetzen, **Bildmodus normal / Scanlines / CRT** (Röhrenlook: Zeilen im 2-Pixel-Raster, bei CRT
   zusätzlich Streifenmaske und dunklere Ränder; ohne Wölbung, damit der Strahl genau trifft; gespeichert),
-  Helligkeit/Kontrast/Sättigung/Schärfe.
+  Menüstil Mensch/Ork, Helligkeit/Kontrast/Sättigung/Schärfe.
 
 ## VR-Tastatur
 

@@ -2,6 +2,58 @@
 
 ## Unveröffentlicht
 
+### 0.5.0-xr — 2026-10-04 (Branch `war1gus`)
+
+Wünsche aus dem Headset (Warcraft I): Scrolltempo im VR-Menü, Tischmodus wie Siedler, Karte mit dem rechten
+Griff ziehen, mit dem linken Griff zoomen.
+- **Karte bewegen über die mittlere Maustaste** von Stratagus (`MouseScrollMap`: Ausschnitt += Tempo ×
+  (Maus − Startpunkt), danach setzt das Spiel die Maus zurück). Die XR-Schicht sendet je Frame den
+  gewünschten Weg als Mausbewegung ab dem Startpunkt; Bruchteile laufen auf (`panBy`).
+  - **Griff der Zeigerhand:** kurz = Rechtsklick beim Loslassen (vorher beim Drücken); halten ≥ 0,45 s oder
+    Zeiger > 1,2 % bewegt = Karte greifen, die Karte folgt der Hand (Faktor 1x/1,5x/2x/3x).
+  - **Stick:** stufenlos und schräg statt Pfeiltasten, quadratische Kennlinie, Tempo 1–10 (Stufe 5 ≈ 0,34
+    Fensterbreiten/s, je Stufe ×1,3). Startpunkt: Zeiger, wenn mittig, sonst Kartenmitte des Spielpakets.
+  - Spielpaket-Profil: `mouseScrollSpeed` (Wargus 4, War1gus 1) und Kartenmitte.
+- **Zoom mit dem Griff der anderen Hand:** halten und Hand heranziehen = größer, wegschieben = kleiner
+  (28 cm = Faktor 2), in beiden Ansichten; Griff + Stick wie bisher.
+- **Tisch-Ansicht** (Werte/Grenzen aus xr-common `xrc::TableLimits` bzw. XR-Settlers): Brett vor dem Kopf,
+  30–75° gekippt, Mitte 0–90 cm unter Blickhöhe, Abstand 0,4–1,5 m, Breite 0,8–2,2 m; Größe/Abstand je
+  Ansicht gespeichert. Eine Pose speist Compositor und Treffer (`tablePoseFor`, `hitQuad`).
+- **VR-Menü:** neuer Reiter „Steuerung“ (Zeigerhand, Karte ziehen, Scrolltempo, Zeiger-Versatz); „Fenster“
+  mit Ansicht, Neigung, Tischhöhe; Menüstil nach „Anzeige“.
+- Tests: test_geometry Tisch (Mitte, Neigung, Treffer Mitte, Oberkante weiter weg, Klemmen über alle
+  Richtungen/Neigungen/Höhen), test_input Scrolltempo/Kennlinie/Ziehfaktor, test_ui Speichern/Laden/Klemmen.
+
+**Nachweis:** gebaut (0 Warnungen, Symbolprüfung, APK-Gate beide; SHA-256 `9286f926…` xr.wargus2, `7813032e…`
+xr.wargus1), Host-Tests und Tests auf der Quest 0 Fehler (110 444 / 2 211 / 144 / 9 281 / 8 697, GPU-Filter, Filmton).
+Installiert (0.5.0-xr), nicht gestartet, im Headset offen.
+
+
+### 0.4.5-xr — 2026-10-03 (Branch `war1gus`)
+
+- **Zeiger-Versatz X/Y** (Pflichtumfang xr-vr-menu §0 P3, Auftrag über die VR-Menü-Session): Reiter
+  „Fenster“ → „‹ Zeiger waagerecht | Wert ›“ und „‹ Zeiger senkrecht | Wert ›“ (‹ = links/oben, › =
+  rechts/unten), Prozent der Bildbreite/-höhe, Raster 0,25 %, ±15 %, NaN → 0, Anzeige „0“/„+1,25 %“/„−0,50 %“,
+  Dauerdruck und Stick-Fokus wie die übrigen Regler. Wirkt nur auf die Abbildung Laser → Spielkoordinaten
+  (`pointerToWindow`), nicht auf Strahl, Zielpunkt oder VR-Menü. Gespeichert als `pointer_offset_x/_y`
+  (geklemmt). Logik `ptroff` in `native/xr/xr_menu_model.h` (TODO xrc/menu.h, inhaltsgleich mit
+  xrc::ptroff). Wargus-Schrift: ‹ › − auf CP437 abgebildet.
+- Tests: test_input (Raster, Klemmen, NaN/Inf, kein −0, Dauerdruck bis ±15, UV-Klemmung, Anzeige),
+  test_ui (Speichern/Laden, Klemmen 99 → 15, nan → 0; Layout/Treffer der neuen Zeilen in beiden Datensätzen).
+
+
+### 0.4.4-xr — 2026-10-03 (Branch `war1gus`)
+
+- **Warcraft I: Straßen-Hinweis auf dem Ladebild** (Headset 03.10.: Farm ließ sich nicht bauen – War1gus
+  verlangt eine angrenzende Straße für jedes Gebäude außer dem Rathaus, das Spiel sagt das nicht).
+  Neues Feld `loaderTip` im Spielpaket-Profil (`xr_game.h`, Wargus: keiner). Mit Tipp bleibt das Ladebild
+  mindestens 8 s stehen (sonst nur ~1,4 s); Trigger, A oder B blenden es aus, ohne dass der Druck ans Spiel
+  geht (Tasten werden danach re-armt). Darunter laufen nur die Logo-Filme.
+- Test: Ladebild im Spielschritt als PNG, Tipp-Zeilen passen in die Breite (nur mit Schrift; auf der Quest).
+
+**Nachweis:** gebaut (0 Warnungen, Symbolprüfung, APK-Gate beide; SHA-256 `6e53e41e…` xr.wargus2,
+`df4c9928…` xr.wargus1), Host-Tests 0 Fehler. Quest-Tests und Installation offen (Quest nicht verbunden).
+
 ### Eigene Icons für beide Apps (2026-10-03)
 
 - Beide Apps hatten dasselbe SDL-Standard-Icon. Jetzt eigene Launcher-Icons als Flavor-Ressourcen

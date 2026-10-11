@@ -152,7 +152,49 @@ void testHits() {
 
 }  // namespace
 
+// Tisch-Ansicht: Mitte unter Blickhöhe, Fläche zum Betrachter gekippt, Treffer vom Kopf auf die Mitte = 0,5/0,5;
+// Klemmen (NaN → untere Grenze) über den ganzen Neigungs-/Höhen-/Richtungsbereich.
+void testTable() {
+  const XrVector3f head{0.2f, 1.6f, -0.3f};
+  for (float yawDeg = -180.0f; yawDeg <= 180.0f; yawDeg += 45.0f) {
+    for (float tilt = TableLimits::kMinTilt; tilt <= TableLimits::kMaxTilt; tilt += 5.0f) {
+      for (float lower = TableLimits::kMinLower; lower <= TableLimits::kMaxLower; lower += 15.0f) {
+        const float yaw = yawDeg * 0.017453292f;
+        const float dist = 1.0f;
+        XrPosef t = tablePoseFor(head, yaw, dist, tilt, lower);
+        check(std::fabs(t.position.y - (head.y - lower / 100.0f)) < 1e-4f, "Tischmitte unter Blickhöhe");
+        const float dx = t.position.x - head.x, dz = t.position.z - head.z;
+        check(std::fabs(std::sqrt(dx * dx + dz * dz) - dist) < 1e-4f, "Tischabstand waagerecht");
+        XrVector3f n = rotate(t.orientation, {0.0f, 0.0f, 1.0f});
+        check(std::fabs(n.y - std::sin(tilt * 0.017453292f)) < 1e-4f, "Fläche um die Neigung zum Himmel gekippt");
+        // Strahl vom Kopf auf die Tischmitte
+        XrVector3f dir = sub(t.position, head);
+        float len = std::sqrt(dot(dir, dir));
+        dir = scale(dir, 1.0f / len);
+        XrPosef aim{lookAlong(dir), head};
+        float u, v;
+        XrVector3f p;
+        const float w = 1.4f, h = 1.4f * 0.625f;
+        bool hit = hitQuad(aim, t, w, h, &u, &v, &p);
+        check(hit && std::fabs(u - 0.5f) < 1e-3f && std::fabs(v - 0.5f) < 1e-3f, "Treffer Tischmitte");
+        // Oberkante liegt weiter weg als die Unterkante (Oberkante kippt weg)
+        XrVector3f top = add(t.position, rotate(t.orientation, {0.0f, h / 2, 0.0f}));
+        XrVector3f bottom = add(t.position, rotate(t.orientation, {0.0f, -h / 2, 0.0f}));
+        const float dTop = std::hypot(top.x - head.x, top.z - head.z);
+        const float dBottom = std::hypot(bottom.x - head.x, bottom.z - head.z);
+        check(dTop > dBottom, "Oberkante weiter weg");
+      }
+    }
+  }
+  float w = std::nanf(""), d = 99.0f, tilt = 5.0f, lower = -10.0f;
+  clampTable(&w, &d, &tilt, &lower);
+  check(w == TableLimits::kMinWidth && d == TableLimits::kMaxDistance && tilt == TableLimits::kMinTilt &&
+            lower == TableLimits::kMinLower,
+        "Tisch geklemmt, NaN -> untere Grenze");
+}
+
 int main() {
+  testTable();
   testMath();
   testClamp();
   testHits();
