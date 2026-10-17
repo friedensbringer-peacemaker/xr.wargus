@@ -40,3 +40,9 @@ War1gus: `war1tool` (in `upstream/war1gus`) liest `DATA/DATA.WAR` der eigenen DO
 
 GPL-2.0 wie Stratagus und Wargus (siehe `COPYING`); eingebundene Bibliotheken behalten ihre
 eigenen Lizenzen. `<XR-Ordner>` meint in der Doku den gemeinsamen Ordner aller XR-Projekte.
+
+**Keine fertigen APKs (REL-001):** Stratagus steht unter GPL-2.0-only. Für eine Quest-APK wird
+zusätzlich der Khronos-OpenXR-Loader gebraucht, der unter Apache-2.0 steht – laut FSF ist das mit
+GPL-2.0-only nicht verträglich. Deshalb veröffentlicht dieses Repo nur den Quellcode, der für sich
+unbedenklich ist, und keine APKs. Wer die App nutzen möchte, baut sie selbst und verwendet dabei
+die eigene Kopie der Spieldaten.
